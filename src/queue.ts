@@ -8,35 +8,34 @@
 import { Client, GuildMember, Message, MessageActionRow, MessageButton, TextChannel, MessageEmbed } from "discord.js";
 import { MemberState, MemberStateManager } from "./member_state_manager";
 import { UserError } from "./user_action_error";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const AsciiTable = require('ascii-table');
-import "./embed_helper"
+import AsciiTable from 'ascii-table';
+import "./embed_helper";
 
 export class HelpQueueDisplayManager {
 
-    private client: Client
-    private display_channel: TextChannel
-    private queue_message: Message | null
-    private schedule_message: Message | null
-    private schedule_update: Date
+    private client: Client;
+    private display_channel: TextChannel;
+    private queue_message: Message | null;
+    private schedule_message: Message | null;
+    private schedule_update: Date;
 
     constructor(client: Client, display_channel: TextChannel, queue_message: Message | null, schedule_message: Message | null) {
-        this.client = client
-        this.display_channel = display_channel
-        this.queue_message = queue_message
-        this.schedule_message = schedule_message
-        this.schedule_update = new Date()
+        this.client = client;
+        this.display_channel = display_channel;
+        this.queue_message = queue_message;
+        this.schedule_message = schedule_message;
+        this.schedule_update = new Date();
     }
 
     get update_time(): Date {
-        return this.schedule_update
+        return this.schedule_update;
     }
 
     public setScheduleUpdateTime(time: Date): void {
-        if(time > new Date()){
-            this.schedule_update = time
+        if (time > new Date()) {
+            this.schedule_update = time;
         } else {
-            this.schedule_update.setDate(new Date().getDate() + 1)
+            this.schedule_update.setDate(new Date().getDate() + 1);
         }
 
     }
@@ -48,15 +47,15 @@ export class HelpQueueDisplayManager {
      * @returns a table of the list of people in queue in text form that can be used in a message
      */
     private GetQueueText(queue: HelpQueue, queue_members: MemberState[]): string {
-        const quant_prase = queue.length == 1 ? 'is 1 person' : `are ${queue.length} people`
-        const status_line = `The queue is **${queue.is_open ? 'OPEN' : 'CLOSED'}**. There ${quant_prase} in the queue.\n`
+        const quant_prase = queue.length == 1 ? 'is 1 person' : `are ${queue.length} people`;
+        const status_line = `The queue is **${queue.is_open ? 'OPEN' : 'CLOSED'}**. There ${quant_prase} in the queue.\n`;
         if (queue.length > 0) {
-            const table = new AsciiTable()
-            table.setHeading('Position', 'Username')
-            queue_members.forEach((state, idx) => table.addRow(idx + 1, state.member.user.username))
-            return status_line + '```\n' + table.toString() + '\n```'
+            const table = new AsciiTable();
+            table.setHeading('Position', 'Username');
+            queue_members.forEach((state, idx) => table.addRow(idx + 1, state.member.user.username));
+            return status_line + '```\n' + table.toString() + '\n```';
         }
-        return status_line
+        return status_line;
     }
 
     /**
@@ -64,20 +63,20 @@ export class HelpQueueDisplayManager {
      * If not, then clear the channel and set queue_message and schedule_message to null
      * @returns 
      */
-    EnsureQueueSafe(): Promise<void> {
+    async EnsureQueueSafe(): Promise<void> {
         return this.display_channel.messages.fetchPinned()
-            .then(messages => messages.filter(msg => msg.author == this.client.user))
+            .then(messages => messages.filter(msg => msg.author === this.client.user))
             .then(messages => {
                 if (messages.size === 0) {
-                    this.queue_message = null
-                    this.schedule_message = null
+                    this.queue_message = null;
+                    this.schedule_message = null;
                 } else if (messages.size !== 2) {
-                    messages.forEach(message => message.delete())
-                    messages.clear()
-                    this.queue_message = null
-                    this.schedule_message = null
+                    messages.forEach(message => message.delete());
+                    messages.clear();
+                    this.queue_message = null;
+                    this.schedule_message = null;
                 }
-            })
+            });
     }
 
     /**
@@ -87,16 +86,11 @@ export class HelpQueueDisplayManager {
      * @returns The queue_message, if a new one was created
      */
     async OnQueueUpdate(queue: HelpQueue, queue_members: MemberState[]): Promise<Message<boolean> | undefined> {
-        const message_text = this.GetQueueText(queue, queue_members)
-        let embedColor = 0x000000
-        if (queue.is_open === true) {
-            embedColor = 0x00FF00
-        } else {
-            embedColor = 0xFF0000
-        }
+        const message_text = this.GetQueueText(queue, queue_members);
+        const embedColor = queue.is_open ? 0x00FF00 : 0xFF0000;
         const embedTable = new MessageEmbed()
             .setColor(embedColor)
-            .setTitle('Queue for ' + queue.name + "\n" + message_text)
+            .setTitle('Queue for ' + queue.name + "\n" + message_text);
         const joinLeaveButtons = new MessageActionRow()
             .addComponents(
                 new MessageButton()
@@ -113,7 +107,7 @@ export class HelpQueueDisplayManager {
                     .setDisabled(!queue.is_open)
                     .setLabel('Leave Queue')
                     .setStyle('DANGER')
-            )
+            );
         const notifButtons = new MessageActionRow()
             .addComponents(
                 new MessageButton()
@@ -130,24 +124,24 @@ export class HelpQueueDisplayManager {
                     .setDisabled(queue.is_open)
                     .setLabel('Remove Notifications')
                     .setStyle('PRIMARY')
-            )
+            );
 
         // If queue_message exists, edit it
         // Else, send a new message
         if (this.queue_message === null) {
-            this.EnsureQueueSafe()
+            await this.EnsureQueueSafe();
             return await this.display_channel.send({
                 embeds: [embedTable],
                 components: [joinLeaveButtons, notifButtons]
             }).then(message => {
-                this.queue_message = message
-                return message
-            })
+                this.queue_message = message;
+                return message;
+            });
         } else {
             await this.queue_message.edit({
                 embeds: [embedTable],
                 components: [joinLeaveButtons, notifButtons]
-            }).catch()
+            }).catch();
         }
     }
     /**
@@ -156,27 +150,27 @@ export class HelpQueueDisplayManager {
      * @returns The schedule_message, if a new one was created
      */
     async UpdateSchedule([message_text, update_time]: [string, Date]): Promise<Message<boolean> | undefined> {
-        this.setScheduleUpdateTime(update_time)
-        let old_schedule_message = this.schedule_message
+        this.setScheduleUpdateTime(update_time);
+        const old_schedule_message = this.schedule_message;
         const scheduleEmbed = new MessageEmbed()
             .setTitle("Schedule")
             .setColor(0xFBA736)
             .setDescription(message_text)
-            .setTimestamp()
+            .setTimestamp();
         if (this.schedule_message === null) {
-            this.EnsureQueueSafe()
+            this.EnsureQueueSafe();
             await this.display_channel.send({
                 embeds: [scheduleEmbed]
             }).then(message => {
-                this.schedule_message = message
-            })
+                this.schedule_message = message;
+            });
         } else {
             await this.schedule_message.edit({
                 embeds: [scheduleEmbed]
-            }).catch()
+            }).catch();
         }
         if (old_schedule_message !== this.schedule_message && this.schedule_message !== null) {
-            return this.schedule_message
+            return this.schedule_message;
         }
 
     }
@@ -192,38 +186,38 @@ export class HelpQueue {
     private notif_queue: Set<GuildMember> = new Set()
 
     constructor(name: string, display_manager: HelpQueueDisplayManager, member_state_manager: MemberStateManager) {
-        this.name = name
-        this.display_manager = display_manager
-        this.member_state_manager = member_state_manager
+        this.name = name;
+        this.display_manager = display_manager;
+        this.member_state_manager = member_state_manager;
     }
 
     get length(): number {
-        return this.queue.length
+        return this.queue.length;
     }
 
     get is_open(): boolean {
-        return this.helpers.size > 0
+        return this.helpers.size > 0;
     }
 
     Has(member: GuildMember): boolean {
-        return this.queue.find(queue_member => queue_member.member == member) !== undefined
+        return this.queue.find(queue_member => queue_member.member == member) !== undefined;
     }
-    
+
     get helpers_set(): Set<GuildMember> {
-        return this.helpers
+        return this.helpers;
     }
 
     get update_time(): Date {
-        return this.display_manager.update_time
+        return this.display_manager.update_time;
     }
 
     /**
      * Removes all people from this queue
      */
     async Clear(): Promise<void> {
-        this.queue.forEach(member => member.TryRemoveFromQueue(this))
-        this.queue = []
-        await this.UpdateDisplay()
+        this.queue.forEach(member => member.TryRemoveFromQueue(this));
+        this.queue = [];
+        await this.UpdateDisplay();
     }
 
     /**
@@ -231,7 +225,7 @@ export class HelpQueue {
      * @returns The queue_message if a new one was created
      */
     async UpdateDisplay(): Promise<Message<boolean> | undefined> {
-        return await this.display_manager.OnQueueUpdate(this, this.queue)
+        return await this.display_manager.OnQueueUpdate(this, this.queue);
     }
 
     /**
@@ -240,14 +234,14 @@ export class HelpQueue {
      * @returns The schedule_message if a new one was created
      */
     async UpdateSchedule(ScheduleMessage: [string, Date]): Promise<Message<boolean> | undefined> {
-        return await this.display_manager.UpdateSchedule(ScheduleMessage)
+        return await this.display_manager.UpdateSchedule(ScheduleMessage);
     }
 
     /**
      * Ensure the queue is sage
      */
     async EnsureQueueSafe(): Promise<void> {
-        await this.display_manager.EnsureQueueSafe()
+        await this.display_manager.EnsureQueueSafe();
     }
 
     /**
@@ -257,18 +251,18 @@ export class HelpQueue {
      */
     async AddHelper(member: GuildMember, mute_notifs: boolean): Promise<void> {
         if (this.helpers.has(member)) {
-            console.warn(`Queue ${this.name} already has helper ${member.user.username}. Ignoring call to AddHelper`)
-            return
+            console.warn(`Queue ${this.name} already has helper ${member.user.username}. Ignoring call to AddHelper`);
+            return;
         }
-        this.helpers.add(member)
+        this.helpers.add(member);
 
         // if helper list size goes from 1, means queue just got open. 
         // when it goes from 2 to 1, not a possible case since you can't press the notif button unless the queue is closed
         // hence, in that case, there is no-one in the notif_queue, and hence no-one is messaged
         if (this.helpers.size === 1 && mute_notifs !== true) {
-            await this.NotifyUsers()
+            await this.NotifyUsers();
         }
-        await this.UpdateDisplay()
+        await this.UpdateDisplay();
     }
 
     /**
@@ -277,11 +271,11 @@ export class HelpQueue {
      */
     async RemoveHelper(member: GuildMember): Promise<void> {
         if (!this.helpers.has(member)) {
-            console.warn(`Queue ${this.name} does not have helper ${member.user.username}. Ignoring call to RemoveHelper`)
-            return
+            console.warn(`Queue ${this.name} does not have helper ${member.user.username}. Ignoring call to RemoveHelper`);
+            return;
         }
-        this.helpers.delete(member)
-        await this.UpdateDisplay()
+        this.helpers.delete(member);
+        await this.UpdateDisplay();
     }
 
     /**
@@ -289,17 +283,17 @@ export class HelpQueue {
      * @param member 
      */
     async Enqueue(member: GuildMember): Promise<void> {
-        const user_state = this.member_state_manager.GetMemberState(member)
-        user_state.TryAddToQueue(this)
-        this.queue.push(user_state)
+        const user_state = this.member_state_manager.GetMemberState(member);
+        user_state.TryAddToQueue(this);
+        this.queue.push(user_state);
         if (this.queue.length == 1) {
             // The queue went from having 0 people to having 1.
             // Notify helpers of this queue that someone has joined.
             await Promise.all(
                 Array.from(this.helpers)
-                    .map(helper => helper.send(`Heads up! <@${member.user.id}> has joined "${this.name}".`)))
+                    .map(helper => helper.send(`Heads up! <@${member.user.id}> has joined "${this.name}".`)));
         }
-        await this.UpdateDisplay()
+        await this.UpdateDisplay();
     }
 
     /**
@@ -308,11 +302,11 @@ export class HelpQueue {
      */
     async Remove(member: GuildMember): Promise<void> {
         // Removes a user from this queue, called by /leave
-        const user_state = this.member_state_manager.GetMemberState(member)
-        user_state.TryRemoveFromQueue(this)
-        this.queue = this.queue.filter(waiting_user => waiting_user != user_state)
+        const user_state = this.member_state_manager.GetMemberState(member);
+        user_state.TryRemoveFromQueue(this);
+        this.queue = this.queue.filter(waiting_user => waiting_user != user_state);
 
-        await this.UpdateDisplay()
+        await this.UpdateDisplay();
     }
 
     /**
@@ -321,14 +315,14 @@ export class HelpQueue {
      */
     async Dequeue(): Promise<MemberState> {
         // Removes next user from this queue, called by /next
-        const user_state = this.queue.shift()
+        const user_state = this.queue.shift();
         if (user_state === undefined) {
-            throw new UserError('Empty queue')
+            throw new UserError('Empty queue');
         }
-        user_state.TryRemoveFromQueue(this)
+        user_state.TryRemoveFromQueue(this);
 
-        await this.UpdateDisplay()
-        return user_state
+        await this.UpdateDisplay();
+        return user_state;
     }
 
     /**
@@ -337,7 +331,7 @@ export class HelpQueue {
      */
     async AddToNotifQueue(member: GuildMember): Promise<void> {
         //Adds member to notification queue
-        this.notif_queue.add(member)
+        this.notif_queue.add(member);
     }
 
     /**
@@ -346,7 +340,7 @@ export class HelpQueue {
      */
     async RemoveFromNotifQueue(member: GuildMember): Promise<void> {
         //Adds member to notification queue
-        this.notif_queue.delete(member)
+        this.notif_queue.delete(member);
     }
 
     /**
@@ -355,8 +349,8 @@ export class HelpQueue {
     async NotifyUsers(): Promise<void> {
         //Notifys the users in the notification queue that the queue is now open
         if (this.notif_queue.size == 0)
-            return
-        this.notif_queue.forEach(member => member.send("Hey! The `" + this.name + "` queue is now open!"))
+            return;
+        this.notif_queue.forEach(member => member.send("Hey! The `" + this.name + "` queue is now open!"));
         this.notif_queue.clear();
     }
 
@@ -365,9 +359,9 @@ export class HelpQueue {
      */
     Peek(): MemberState | undefined {
         if (this.queue.length == 0) {
-            return undefined
+            return undefined;
         } else {
-            return this.queue[0]
+            return this.queue[0];
         }
     }
 }
