@@ -32,7 +32,7 @@ const client = new Client({
 
 const servers: Collection<Guild, AttendingServer> = new Collection();
 
-let firebase_db: any = null;
+let firebase_db: FirebaseFirestore.Firestore | null = null;
 
 void client.login(process.env.BOB_BOT_TOKEN);
 
@@ -41,7 +41,7 @@ client.on('error', (error) => {
 });
 
 client.on('ready', async () => {
-    console.log('B.O.B. V2.1');
+    console.log('B.O.B. V3');
     if (client.user !== null) {
         console.log(`Logged in as ${client.user.tag}!`);
     }
@@ -159,7 +159,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         // send the person who left vc a dm to fill out a form
         // mark as not currently being helped
 
-        server.UpdateMemberLeftVC(member as GuildMember);
+        await server.UpdateMemberLeftVC(member as GuildMember);
     }
 });
 

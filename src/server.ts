@@ -11,9 +11,10 @@ import { MemberStateManager } from "./member_state_manager";
 import { UserError } from "./user_action_error";
 import { MemberState } from "./member_state_manager";
 import { GoogleSpreadsheet, GoogleSpreadsheetWorksheet } from "google-spreadsheet";
+import { Firestore } from "firebase-admin/firestore";
 import * as gcs_creds from '../gcs_service_account_key.json';
 
-import fetch from 'node-fetch';
+// import fetch from 'node-fetch';
 import { EmbedColor, SimpleEmbed } from "./embed_helper";
 
 export class AttendingServer {
@@ -23,7 +24,7 @@ export class AttendingServer {
     private server: Guild
     private attendance_doc: GoogleSpreadsheet | null
     private attendance_sheet: GoogleSpreadsheetWorksheet | null = null
-    private firebase_db: any
+    private firebase_db: Firestore
 
     private tutor_info_doc: GoogleSpreadsheet | null = null
     private tutor_info_sheet: GoogleSpreadsheetWorksheet | null = null
@@ -33,7 +34,7 @@ export class AttendingServer {
     private oldMsgALVC: string | null = null
     private msgEnable = false
 
-    private constructor(client: Client, server: Guild, firebase_db: any, attendance_doc: GoogleSpreadsheet | null) {
+    private constructor(client: Client, server: Guild, firebase_db: Firestore, attendance_doc: GoogleSpreadsheet | null) {
         this.client = client;
         this.server = server;
         this.member_states = new MemberStateManager();
@@ -48,7 +49,8 @@ export class AttendingServer {
      * @param firebase_db The Google Firebase database that stores server and user settings
      * @param attendance_doc The Google Spreadsheet that log tutor's hours
     */
-    static async Create(client: Client, server: Guild, firebase_db: any, attendance_doc: GoogleSpreadsheet | null = null): Promise<AttendingServer> {
+    static async Create(client: Client, server: Guild, firebase_db: Firestore,
+        attendance_doc: GoogleSpreadsheet | null = null): Promise<AttendingServer> {
         if (server.me === null || !server.me.permissions.has("ADMINISTRATOR")) {
             await server.fetchOwner().then(owner =>
                 owner.send(SimpleEmbed(`Sorry. I need full administrator permission to join and manage "${server.name}"`, EmbedColor.Error)));
@@ -61,21 +63,14 @@ export class AttendingServer {
         //Collect server data from the database
         let doc = await firebase_db.collection('msgAfterLeaveVC').doc(server.id).get();
         if (doc.exists) {
-            me.msgEnable = doc.data()["enable"];
-            if (me.msgEnable === undefined) {
+            if (doc.data()?.enable === null) {
                 me.msgEnable = true;
             }
-            me.msgAfterLeaveVC = doc.data()["msgAfterLeaveVC"];
-            if (me.msgAfterLeaveVC === undefined) {
-                me.msgAfterLeaveVC = null;
-            }
-            me.oldMsgALVC = doc.data()["oldMsgALVC"];
-            if (me.oldMsgALVC === undefined) {
-                me.oldMsgALVC = null;
-            }
+            me.msgAfterLeaveVC = doc.data()?.msgAfterLeaveVC;
+            me.oldMsgALVC = doc.data()?.oldMsgALVC;
         } else {
-            me.msgAfterLeaveVC = null;
             me.msgEnable = true;
+            me.msgAfterLeaveVC = null;
             me.oldMsgALVC = null;
         }
 
@@ -84,18 +79,9 @@ export class AttendingServer {
 
         doc = await firebase_db.collection('tutor_info').doc(server.id).get();
         if (doc.exists) {
-            doc_id = doc.data()["tutor_info_doc"];
-            if (doc_id === undefined) {
-                doc_id = null;
-            }
-            sheets_id = doc.data()["tutor_info_sheet"];
-            if (sheets_id === undefined) {
-                sheets_id = null;
-            }
-            me.tutor_info_calendar = doc.data()["tutor_info_calendar"];
-            if (me.tutor_info_calendar === undefined) {
-                me.tutor_info_calendar = null;
-            }
+            doc_id = doc.data()?.tutor_info_doc;
+            sheets_id = doc.data()?.tutor_info_sheet;
+            me.tutor_info_calendar = doc.data()?.tutor_info_calendar;
         } else {
             me.tutor_info_doc = null;
             me.tutor_info_sheet = null;
@@ -132,7 +118,7 @@ export class AttendingServer {
      * @param channel 
      */
     async ClearQueue(channel: CategoryChannel): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == channel.name);
+        const queue = this.queues.find(queue => queue.name === channel.name);
         if (queue === undefined) {
             throw new UserError(`There is not a queue with the name ${channel.name}.`);
         }
@@ -716,7 +702,7 @@ disabled. To enable it, do `/post_session_msg enable: true`";
         const rows = await this.tutor_info_sheet.getRows();
         NameColNum = this.tutor_info_sheet.headerValues.indexOf("Calendar Name");
         IDColNum = this.tutor_info_sheet.headerValues.indexOf("Discord ID");
-        
+
         rows.forEach(row => {
             HelperNames.set(row._rawData[NameColNum], row._rawData[IDColNum]);
         });
@@ -930,13 +916,12 @@ disabled. To enable it, do `/post_session_msg enable: true`";
      * feature has been enabled
      * @param member The member which has just left a session with a tutor
      */
-    UpdateMemberLeftVC(member: GuildMember): void {
+    async UpdateMemberLeftVC(member: GuildMember): Promise<void> {
         if (this.msgAfterLeaveVC === null || this.msgEnable === false) {
-            this.member_states.GetMemberState(member).OnLeaveVC(null);
-            return;
+            await this.member_states.GetMemberState(member).OnLeaveVC(null);
         }
         else {
-            this.member_states.GetMemberState(member).OnLeaveVC(this.msgAfterLeaveVC);
+            await this.member_states.GetMemberState(member).OnLeaveVC(this.msgAfterLeaveVC);
         }
     }
 

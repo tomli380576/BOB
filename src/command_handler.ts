@@ -1,5 +1,4 @@
-import { time } from "@discordjs/builders";
-import { CategoryChannel, CommandInteraction, GuildChannel, GuildMember, MessageEmbed, TextChannel } from "discord.js";
+import { CategoryChannel, CommandInteraction, GuildChannel, GuildMember, TextChannel } from "discord.js";
 import { EmbedColor, SimpleEmbed } from "./embed_helper";
 import { AttendingServer } from "./server";
 import { UserError } from "./user_action_error";
@@ -211,7 +210,7 @@ class ListNextHoursCommandHandler implements CommandHandler {
         } else {
             queue_name = queue_option.name;
         }
-        [response, ] = await server.getUpcomingHoursTable(queue_name);
+        [response,] = await server.getUpcomingHoursTable(queue_name);
         await interaction.editReply({
             embeds: [{
                 title: "Schedule for " + queue_name,

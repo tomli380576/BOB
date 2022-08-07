@@ -31,7 +31,7 @@ export class HelpQueueDisplayManager {
         return this.schedule_update;
     }
 
-    public setScheduleUpdateTime(time: Date): void {
+    setScheduleUpdateTime(time: Date): void {
         if (time > new Date()) {
             this.schedule_update = time;
         } else {
@@ -47,7 +47,7 @@ export class HelpQueueDisplayManager {
      * @returns a table of the list of people in queue in text form that can be used in a message
      */
     private GetQueueText(queue: HelpQueue, queue_members: MemberState[]): string {
-        const quant_prase = queue.length == 1 ? 'is 1 person' : `are ${queue.length} people`;
+        const quant_prase = queue.length === 1 ? 'is 1 person' : `are ${queue.length} people`;
         const status_line = `The queue is **${queue.is_open ? 'OPEN' : 'CLOSED'}**. There ${quant_prase} in the queue.\n`;
         if (queue.length > 0) {
             const table = new AsciiTable();
@@ -158,7 +158,7 @@ export class HelpQueueDisplayManager {
             .setDescription(message_text)
             .setTimestamp();
         if (this.schedule_message === null) {
-            this.EnsureQueueSafe();
+            await this.EnsureQueueSafe();
             await this.display_channel.send({
                 embeds: [scheduleEmbed]
             }).then(message => {
@@ -200,7 +200,7 @@ export class HelpQueue {
     }
 
     Has(member: GuildMember): boolean {
-        return this.queue.find(queue_member => queue_member.member == member) !== undefined;
+        return this.queue.find(queue_member => queue_member.member === member) !== undefined;
     }
 
     get helpers_set(): Set<GuildMember> {
@@ -286,7 +286,7 @@ export class HelpQueue {
         const user_state = this.member_state_manager.GetMemberState(member);
         user_state.TryAddToQueue(this);
         this.queue.push(user_state);
-        if (this.queue.length == 1) {
+        if (this.queue.length === 1) {
             // The queue went from having 0 people to having 1.
             // Notify helpers of this queue that someone has joined.
             await Promise.all(
@@ -348,7 +348,7 @@ export class HelpQueue {
      */
     async NotifyUsers(): Promise<void> {
         //Notifys the users in the notification queue that the queue is now open
-        if (this.notif_queue.size == 0)
+        if (this.notif_queue.size === 0)
             return;
         this.notif_queue.forEach(member => member.send("Hey! The `" + this.name + "` queue is now open!"));
         this.notif_queue.clear();
@@ -358,7 +358,7 @@ export class HelpQueue {
      * @returns the person at the front of this queue
      */
     Peek(): MemberState | undefined {
-        if (this.queue.length == 0) {
+        if (this.queue.length === 0) {
             return undefined;
         } else {
             return this.queue[0];
