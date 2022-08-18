@@ -1,10 +1,8 @@
-import { time } from "@discordjs/builders";
-import { CategoryChannel, Collection, CommandInteraction, GuildChannel, GuildMember, MessageEmbed, TextChannel } from "discord.js";
+import { CategoryChannel, CommandInteraction, GuildChannel, GuildMember, TextChannel } from "discord.js";
 import { EmbedColor, SimpleEmbed } from "./embed_helper";
 import { AttendingServer } from "./server";
 import { UserError } from "./user_action_error";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const AsciiTable = require('ascii-table');
+import AsciiTable from 'ascii-table';
 
 enum CommandAccessLevel {
     ANYONE, STAFF, ADMIN
@@ -199,7 +197,6 @@ class ListNextHoursCommandHandler implements CommandHandler {
     readonly permission = CommandAccessLevel.ANYONE
     async Process(server: AttendingServer, interaction: CommandInteraction) {
         const queue_option = interaction.options.getChannel('queue_name');
-        let response: string;
         let queue_name: string;
         if (queue_option === null) {
             const curChannel = interaction.channel as TextChannel;
@@ -211,7 +208,7 @@ class ListNextHoursCommandHandler implements CommandHandler {
         } else {
             queue_name = queue_option.name;
         }
-        [response,] = await server.getUpcomingHoursTable(queue_name);
+        const [response, _] = await server.getUpcomingHoursTable(queue_name);
         await interaction.editReply({
             embeds: [{
                 title: "Schedule for " + queue_name,
@@ -265,7 +262,7 @@ class RemoveNotifcationsHandler implements CommandHandler {
 }
 
 class MsgAfterLeaveVCHandler implements CommandHandler {
-    readonly permission = CommandAccessLevel.ADMIN
+    readonly permission = CommandAccessLevel.ADMIN;
     async Process(server: AttendingServer, interaction: CommandInteraction) {
         const subcommand = interaction.options.getSubcommand();
         if (subcommand === 'edit') {
@@ -320,6 +317,7 @@ class SetCalendarHandler implements CommandHandler {
 
             //https://calendar.google.com/calendar/embed?src=[calendar_id]&[otherstuff]
 
+            // ? Why is calendar_link nullable
             const header = "https://calendar.google.com/calendar/embed?src=";
             calendar_link = calendar_link.split('&')[0];
             const posHeader = calendar_link.indexOf(header);

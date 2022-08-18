@@ -3,6 +3,8 @@ import { UserError } from "./user_action_error";
 import { GuildMember } from "discord.js";
 
 export class MemberState {
+    // ? Why is everything nullable?
+    // ? What does null represent here
     private current_queue: HelpQueue | null = null
     readonly member: GuildMember
     private start_helping_timestamp: number | null = null
@@ -145,12 +147,12 @@ export class MemberState {
      * the user in dms `dmMessage` if `dmMessage is not null
      * @param dmMessage
      */
-    OnLeaveVC(dmMessage: string | null): void {
+    async OnLeaveVC(dmMessage: string | null): Promise<void> {
         // if a helper, don't update
         if (this.start_being_helped_timestamp == null)
             return;
         if (dmMessage !== null) {
-            this.member.send(dmMessage);
+            await this.member.send(dmMessage);
         }
         this.start_being_helped_timestamp = null;
     }

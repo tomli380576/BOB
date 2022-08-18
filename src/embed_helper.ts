@@ -1,3 +1,4 @@
+// ? Use an enum
 export class EmbedColor {
     static Success = 0x00FF00       // Green
     static Error = 0xFF0000         // Red
@@ -6,6 +7,7 @@ export class EmbedColor {
     static NeedName = 0x0000FF      // Blue
 }
 
+// TODO: Add data model for the return value
 export function SimpleEmbed(message: string, color = EmbedColor.Neutral): any {
     if (message.length > 256) {
         return {

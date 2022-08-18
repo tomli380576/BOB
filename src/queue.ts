@@ -8,10 +8,8 @@
 import { Client, GuildMember, Message, MessageActionRow, MessageButton, TextChannel, MessageEmbed } from "discord.js";
 import { MemberState, MemberStateManager } from "./member_state_manager";
 import { UserError } from "./user_action_error";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const AsciiTable = require('ascii-table');
+import AsciiTable from 'ascii-table';
 import "./embed_helper";
-import { embedFieldPredicate } from "@discordjs/builders/dist/messages/embed/Assertions";
 
 export class HelpQueueDisplayManager {
 
@@ -64,7 +62,7 @@ export class HelpQueueDisplayManager {
      * If not, then clear the channel and set queue_message and schedule_message to null
      * @returns 
      */
-    EnsureQueueSafe(): Promise<void> {
+    async EnsureQueueSafe(): Promise<void> {
         return this.display_channel.messages.fetchPinned()
             .then(messages => messages.filter(msg => msg.author == this.client.user))
             .then(messages => {
@@ -97,8 +95,8 @@ export class HelpQueueDisplayManager {
         const embedTable = new MessageEmbed()
             .setColor(embedColor)
             .setTimestamp();
-            //TODO: .setAuthor({ name: 'BOB', iconURL: 'https://i.postimg.cc/dVkg4XFf/BOB-pfp.png' })
-        if(message_text.length === 1) {
+        //TODO: .setAuthor({ name: 'BOB', iconURL: 'https://i.postimg.cc/dVkg4XFf/BOB-pfp.png' })
+        if (message_text.length === 1) {
             embedTable.setTitle('Queue for ' + queue.name + "\n" + message_text[0]);
         } else {
             embedTable.setTitle('Queue for ' + queue.name + "\n" + message_text[0]);
@@ -142,7 +140,7 @@ export class HelpQueueDisplayManager {
         // If queue_message exists, edit it
         // Else, send a new message
         if (this.queue_message === null) {
-            this.EnsureQueueSafe();
+            await this.EnsureQueueSafe();
             return await this.display_channel.send({
                 embeds: [embedTable],
                 components: [joinLeaveButtons, notifButtons]
@@ -164,15 +162,15 @@ export class HelpQueueDisplayManager {
      */
     async UpdateSchedule([message_text, update_time]: [string, Date]): Promise<Message<boolean> | undefined> {
         await this.setScheduleUpdateTime(update_time);
-        let old_schedule_message = this.schedule_message;
+        const old_schedule_message = this.schedule_message;
         const scheduleEmbed = new MessageEmbed()
             .setTitle("Schedule")
             .setColor(0xFBA736)
             .setDescription(message_text)
             .setTimestamp();
-            // TODO: .setAuthor({ name: 'BOB', iconURL: 'https://i.postimg.cc/dVkg4XFf/BOB-pfp.png' })
+        // TODO: .setAuthor({ name: 'BOB', iconURL: 'https://i.postimg.cc/dVkg4XFf/BOB-pfp.png' })
         if (this.schedule_message === null) {
-            this.EnsureQueueSafe();
+            await this.EnsureQueueSafe();
             await this.display_channel.send({
                 embeds: [scheduleEmbed]
             }).then(message => {
@@ -213,16 +211,16 @@ export class HelpQueue {
         return this.helpers.size > 0;
     }
 
-    Has(member: GuildMember): boolean {
-        return this.queue.find(queue_member => queue_member.member == member) !== undefined;
-    }
-
     get helpers_set(): Set<GuildMember> {
         return this.helpers;
     }
 
     get update_time(): Date {
         return this.display_manager.update_time;
+    }
+
+    Has(member: GuildMember): boolean {
+        return this.queue.find(queue_member => queue_member.member == member) !== undefined;
     }
 
     /**

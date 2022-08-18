@@ -5,17 +5,16 @@
  * command_handler.ts
  **************************************************************/
 
-import { CategoryChannel, Client, Guild, GuildChannel, Role, TextChannel, User, Collection, GuildMember, Channel, Message } from "discord.js";
+import { CategoryChannel, Client, Guild, GuildChannel, Role, TextChannel, User, Collection, GuildMember, Channel } from "discord.js";
 import { HelpQueue, HelpQueueDisplayManager } from "./queue";
 import { MemberStateManager } from "./member_state_manager";
 import { UserError } from "./user_action_error";
 import { MemberState } from "./member_state_manager";
 import { GoogleSpreadsheet, GoogleSpreadsheetRow, GoogleSpreadsheetWorksheet } from "google-spreadsheet";
-import * as gcs_creds from '../gcs_service_account_key.json';
-
+import gcs_creds from '../gcs_service_account_key.json';
 import fetch from 'node-fetch';
 import { EmbedColor, SimpleEmbed } from "./embed_helper";
-import { Embed } from "@discordjs/builders";
+import { Firestore } from "firebase-admin/firestore";
 
 export class AttendingServer {
     private queues: HelpQueue[] = []
@@ -49,7 +48,9 @@ export class AttendingServer {
      * @param firebase_db The Google Firebase database that stores server and user settings
      * @param attendance_doc The Google Spreadsheet that log tutor's hours
     */
-    static async Create(client: Client, server: Guild, firebase_db: any, attendance_doc: GoogleSpreadsheet | null = null): Promise<AttendingServer> {
+
+    // TODO: make attendance_doc an optional parameter
+    static async Create(client: Client, server: Guild, firebase_db: Firestore, attendance_doc: GoogleSpreadsheet | null = null): Promise<AttendingServer> {
         if (server.me === null || !server.me.permissions.has("ADMINISTRATOR")) {
             await server.fetchOwner().then(owner =>
                 owner.send(SimpleEmbed(`Sorry. I need full administrator permission to join and manage "${server.name}"`, EmbedColor.Error)));
@@ -59,41 +60,34 @@ export class AttendingServer {
 
         const me = new AttendingServer(client, server, firebase_db, attendance_doc);
 
-        //Collect server data from the database
-        let doc = await firebase_db.collection('msgAfterLeaveVC').doc(server.id).get();
-        if (doc.exists) {
-            me.msgEnable = doc.data()["enable"];
-            if (me.msgEnable === undefined) {
-                me.msgEnable = true;
-            }
-            me.msgAfterLeaveVC = doc.data()["msgAfterLeaveVC"];
-            if (me.msgAfterLeaveVC === undefined) {
-                me.msgAfterLeaveVC = null;
-            }
-            me.oldMsgALVC = doc.data()["oldMsgALVC"];
-            if (me.oldMsgALVC === undefined) {
-                me.oldMsgALVC = null;
-            }
-        } else {
-            me.msgAfterLeaveVC = null;
-            me.msgEnable = true;
-            me.oldMsgALVC = null;
+        // Collect server data from the database
+        // ? What is in msgAfterLeaveVC
+        // ? Data model
+        const msgAfterLeaveVCDoc = await firebase_db.collection('msgAfterLeaveVC').doc(server.id).get();
+        if (msgAfterLeaveVCDoc.exists) {
+            me.msgEnable = msgAfterLeaveVCDoc.data()?.enable ?? true;
+            me.msgAfterLeaveVC = msgAfterLeaveVCDoc.data()?.msgAfterLeaveVC ?? null;
+            me.oldMsgALVC = msgAfterLeaveVCDoc.data()?.oldMsgALVC ?? null;
         }
 
-        let sheets_id: string | null = null;
-        let doc_id: string | null = null;
+        let sheets_id: string | null = null; // ? what is sheets id, the one in .env?
+        let doc_id: string | null = null; // ? what is doc id
 
-        doc = await firebase_db.collection('tutor_info').doc(server.id).get();
-        if (doc.exists) {
-            doc_id = doc.data()["tutor_info_doc"];
+        // ? What is iin tutor_info
+        // ? Data model anywhere
+
+        // TODO: Replace everything below with ?? operator
+        const tutorInfoDoc = await firebase_db.collection('tutor_info').doc(server.id).get();
+        if (tutorInfoDoc.exists) {
+            doc_id = tutorInfoDoc.data()["tutor_info_doc"];
             if (doc_id === undefined) {
                 doc_id = null;
             }
-            sheets_id = doc.data()["tutor_info_sheet"];
+            sheets_id = tutorInfoDoc.data()["tutor_info_sheet"];
             if (sheets_id === undefined) {
                 sheets_id = null;
             }
-            me.tutor_info_calendar = doc.data()["tutor_info_calendar"];
+            me.tutor_info_calendar = tutorInfoDoc.data()["tutor_info_calendar"];
             if (me.tutor_info_calendar === undefined) {
                 me.tutor_info_calendar = null;
             }
@@ -133,7 +127,7 @@ export class AttendingServer {
      * @param channel 
      */
     async ClearQueue(channel: CategoryChannel): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == channel.name);
+        const queue = this.queues.find(queue => queue.name === channel.name);
         if (queue === undefined) {
             throw new UserError(`There is not a queue with the name ${channel.name}.`);
         }
@@ -147,7 +141,7 @@ export class AttendingServer {
      */
     private GetHelpableQueues(member: GuildMember) {
         return this.queues.filter(queue =>
-            member.roles.cache.find(role => role.name == queue.name) !== undefined);
+            member.roles.cache.find(role => role.name === queue.name) !== undefined);
     }
 
     /**
@@ -157,7 +151,7 @@ export class AttendingServer {
      */
     async GetHelpersForQueue(queue_name: string): Promise<Collection<string, GuildMember>> {
         return this.server.roles.fetch().then(roles => {
-            const queue_role = roles.find(role => role.name == queue_name);
+            const queue_role = roles.find(role => role.name === queue_name);
             if (queue_role === undefined) {
                 throw new UserError(`There exists no queue with the name \`${queue_name}\``);
             }
@@ -187,7 +181,7 @@ export class AttendingServer {
      * @param member The member that is to be removed
      */
     async RemoveMember(queue_name: string, member: GuildMember): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == queue_name);
+        const queue = this.queues.find(queue => queue.name === queue_name);
         if (queue === undefined) {
             throw new UserError(`There is not a queue with the name ${queue_name}`);
         }
@@ -202,12 +196,12 @@ export class AttendingServer {
      */
     async AddHelper(member: GuildMember, mute_notif: boolean): Promise<void> {
         const helpable_queues = this.GetHelpableQueues(member);
-        if (helpable_queues.length == 0) {
+        if (helpable_queues.length === 0) {
             throw new UserError('You are a staff member but do not have any queue roles assigned. I don\'t know where you are allowed to help :(');
         }
         this.member_states.GetMemberState(member).StartHelping();
         await Promise.all(this.GetHelpableQueues(member).map(async queue => {
-            queue.AddHelper(member, mute_notif);
+            await queue.AddHelper(member, mute_notif);
             await queue.UpdateSchedule(await this.getUpcomingHoursTable(queue.name));
         }));
         // if the queue already has people, notify the the tutor that there is a queue that isn't empty
@@ -234,7 +228,7 @@ export class AttendingServer {
             //find the sheet whose name is the same as the server's name
             for (let i = 0; i < this.attendance_doc.sheetCount; i++) {
                 const current_sheet = this.attendance_doc.sheetsByIndex[i];
-                if (current_sheet.title == this.server.name) {
+                if (current_sheet.title === this.server.name) {
                     this.attendance_sheet = current_sheet;
                 }
             }
@@ -294,7 +288,7 @@ export class AttendingServer {
         }
 
         const helpable_queues = this.GetHelpableQueues(helper);
-        if (helpable_queues.length == 0) {
+        if (helpable_queues.length === 0) {
             throw new UserError('You are not registered as a helper for any queues.');
         }
 
@@ -317,7 +311,7 @@ export class AttendingServer {
         // if user entered a particular queue to remove from
         let target_queue: HelpQueue;
         if (queue_option !== null) {
-            const queue = this.queues.find(queue => queue.name == queue_option.name);
+            const queue = this.queues.find(queue => queue.name === queue_option.name);
             if (queue === undefined) {
                 throw new UserError(`There is not a queue with the name ${queue_option.name}`);
             }
@@ -331,7 +325,7 @@ export class AttendingServer {
             target_queue = helpable_queues[index_of_max];
         }
         // if there's no-one to dequeue
-        if (target_queue.length == 0) {
+        if (target_queue.length === 0) {
             throw new UserError('There is no one left to help. Now might be a good time for a coffee.');
         }
         const target_member_state = await target_queue.Dequeue();
@@ -352,7 +346,7 @@ export class AttendingServer {
 
         // If a queue name is specified, check that a queue with that name exists
         if (queue_name !== null) {
-            const queue = this.queues.find(queue => queue.name == queue_name);
+            const queue = this.queues.find(queue => queue.name === queue_name);
             if (queue === undefined) {
                 throw new UserError(`There is not a queue with the name ${queue_name}`);
             }
@@ -366,7 +360,7 @@ export class AttendingServer {
                 return;
 
             if (queue_name !== null) {
-                if (member_state.queue.name == queue_name) {
+                if (member_state.queue.name === queue_name) {
                     targets.push(member_state.member);
                 }
             } else {
@@ -398,7 +392,7 @@ export class AttendingServer {
      * @param member 
      */
     async EnqueueUser(queue_name: string, member: GuildMember): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == queue_name);
+        const queue = this.queues.find(queue => queue.name === queue_name);
         if (queue === undefined) {
             throw new UserError(`There is not a queue with the name ${queue_name}`);
 
@@ -414,11 +408,11 @@ export class AttendingServer {
      * @param name The name of the category
      */
     async CreateQueue(name: string): Promise<void> {
-        if (name.toLowerCase() == 'admin' || name.toLowerCase() == 'staff') {
+        if (name.toLowerCase() === 'admin' || name.toLowerCase() === 'staff') {
             throw new UserError(`Queues cannot be named "admin" or "staff"`);
         }
 
-        if (this.queues.find(queue => queue.name == name) !== undefined) {
+        if (this.queues.find(queue => queue.name === name) !== undefined) {
             throw new UserError(`A queue with the name ${name} already exists on this server.`);
         }
 
@@ -440,18 +434,19 @@ export class AttendingServer {
      * @param channel The name of the category to be removed
      */
     async RemoveQueue(channel: GuildChannel): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == channel.name);
+        const queue = this.queues.find(queue => queue.name === channel.name);
         if (channel.type !== 'GUILD_CATEGORY' || queue === undefined) {
             throw new UserError(`There is not a queue with the name ${channel.name}`);
         }
 
-        this.queues = this.queues.filter(x => x != queue);
-        const x = await Promise.all<Channel | void>((channel as CategoryChannel).children.map(child => {
+        this.queues = this.queues.filter(x => x !== queue);
+        // ? what is x
+        const x = await Promise.all<Channel>((channel as CategoryChannel).children.map(child => {
             return child.delete();
         }));
         await channel.delete();
 
-        const role = this.server.roles.cache.find(role => role.name == channel.name);
+        const role = this.server.roles.cache.find(role => role.name === channel.name);
         if (role !== undefined) {
             await role.delete();
         }
@@ -463,12 +458,12 @@ export class AttendingServer {
      * @param queue_name 
      */
     async JoinNotifications(queue_name: string, member: GuildMember): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == queue_name);
+        const queue = this.queues.find(queue => queue.name === queue_name);
         if (queue === undefined) {
             throw new UserError(`There is not a queue with the name ${queue_name}`);
         }
         await queue.AddToNotifQueue(member);
-        member.send(SimpleEmbed("You will be notified when the queue becomes open.", EmbedColor.Success));
+        await member.send(SimpleEmbed("You will be notified when the queue becomes open.", EmbedColor.Success));
     }
 
     /**
@@ -477,12 +472,12 @@ export class AttendingServer {
      * @param queue_name 
      */
     async RemoveNotifications(queue_name: string, member: GuildMember): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == queue_name);
+        const queue = this.queues.find(queue => queue.name === queue_name);
         if (queue === undefined) {
             throw new UserError(`There is not a queue with the name ${queue_name}`);
         }
         await queue.RemoveFromNotifQueue(member);
-        member.send(SimpleEmbed("You will no longer be notified when the queue becomes open.", EmbedColor.Success));
+        await member.send(SimpleEmbed("You will no longer be notified when the queue becomes open.", EmbedColor.Success));
     }
 
     /**
@@ -491,16 +486,16 @@ export class AttendingServer {
      */
     async DiscoverQueues(): Promise<void> {
         await this.server.channels.fetch()
-            .then(channels => channels.filter(channel => channel.type == 'GUILD_CATEGORY'))
+            .then(channels => channels.filter(channel => channel.type === 'GUILD_CATEGORY'))
             .then(channels => channels.map(channel => channel as CategoryChannel))
             .then(categories =>
                 Promise.all(categories.map(category => {
-                    const queue_channel = category.children.find(child => child.name == 'queue') as TextChannel;
-                    if (queue_channel !== undefined && queue_channel.type == "GUILD_TEXT") {
-                        if (this.queues.find(queue => queue.name == category.name) === undefined) {
+                    const queue_channel = category.children.find(child => child.name === 'queue') as TextChannel;
+                    if (queue_channel !== undefined && queue_channel.type === "GUILD_TEXT") {
+                        if (this.queues.find(queue => queue.name === category.name) === undefined) {
                             // get the queue message and schedule message if they already exists
                             return queue_channel.messages.fetchPinned()
-                                .then(messages => messages.filter(msg => msg.author == this.client.user))
+                                .then(messages => messages.filter(msg => msg.author === this.client.user))
                                 .then(messages => {
                                     if (messages.size === 2) {
                                         const first_message = messages.first();
@@ -518,7 +513,7 @@ export class AttendingServer {
                                         new HelpQueue(category.name, new HelpQueueDisplayManager(this.client, queue_channel, messages[0], messages[1]),
                                             this.member_states));
                                     await (await queue_channel.messages.fetch()).forEach(message => {
-                                        if(message.pinned === false)
+                                        if (message.pinned === false)
                                             message.delete();
                                     });
                                 });
@@ -538,20 +533,21 @@ export class AttendingServer {
      * @param roles Collection of <string: name of role, Role: role object>
      * @returns `Role`: the student role
      */
+    // TODO: Use nullish coalescing here
     private async EnsureRolesExist(roles: Collection<string, Role>) {
-        let student_role = roles.find(role => role.name == "Student");
+        let student_role = roles.find(role => role.name === "Student");
         if (student_role === undefined) {
             student_role = await this.server.roles.create({ name: 'Student', color: "GREEN" });
         }
         await student_role.setHoist(true);
 
-        let staff_role = roles.find(role => role.name == "Staff");
+        let staff_role = roles.find(role => role.name === "Staff");
         if (staff_role === undefined) {
             staff_role = await this.server.roles.create({ name: 'Staff', color: "RED" });
         }
         await staff_role.setHoist(true);
 
-        let admin_role = roles.find(role => role.name == "Admin");
+        let admin_role = roles.find(role => role.name === "Admin");
         if (admin_role === undefined) {
             admin_role = await this.server.roles.create({ name: 'Admin', color: "DARK_VIVID_PINK" });
         }
@@ -566,7 +562,7 @@ export class AttendingServer {
         }
 
         for (const queue of this.queues) {
-            let queue_role = roles.find(role => role.name == queue.name);
+            let queue_role = roles.find(role => role.name === queue.name);
             if (queue_role === undefined) {
                 queue_role = await this.server.roles.create({ name: queue.name, color: "ORANGE" });
             }
@@ -583,7 +579,7 @@ export class AttendingServer {
      * @param member 
      */
     async EnsureHasRole(member: GuildMember): Promise<void> {
-        if (member.roles.highest == this.server.roles.everyone) {
+        if (member.roles.highest === this.server.roles.everyone) {
             const roles = await this.server.roles.fetch();
             const student_role = await this.EnsureRolesExist(roles);
             await member.roles.add(student_role);
@@ -611,7 +607,7 @@ export class AttendingServer {
      * @param queue_name The name of the category
      */
     async EnsureQueueSafe(queue_name: string): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == queue_name);
+        const queue = this.queues.find(queue => queue.name === queue_name);
         if (queue === undefined) {
             return;
         }
@@ -623,12 +619,14 @@ export class AttendingServer {
      * @param queue_name The queue that needs to be updated
      */
     async ForceQueueUpdate(queue_name: string): Promise<void> {
-        const queue = this.queues.find(queue => queue.name == queue_name);
+        const queue = this.queues.find(queue => queue.name === queue_name);
         if (queue === undefined) {
             return;
         }
         const queue_message = await queue.UpdateDisplay();
         const schedule_message = await queue.UpdateSchedule(await this.getUpcomingHoursTable(queue_name));
+
+        // TODO: Negate if to guard statments
         if (queue_message !== null && queue_message !== undefined) { // if not void, new messages was created
             if (schedule_message === null || schedule_message === undefined) {
                 console.log("queue_message for " + queue_name + " was not void, but it's schedule message was void");
@@ -636,10 +634,11 @@ export class AttendingServer {
             } else {
                 // Discord orders pin list by newest first
                 await schedule_message.pin();
-                await queue_message.pin()
-                ;(await queue_message.channel.messages.fetch()).forEach(message => {
-                    if(message.pinned !== true)
-                        message.delete();
+                await queue_message.pin();
+                (await queue_message.channel.messages.fetch()).forEach(async message => {
+                    if (message.pinned !== true) {
+                        await message.delete();
+                    }
                 });
             }
         }
@@ -647,8 +646,8 @@ export class AttendingServer {
 
     async ForceUpdateAllQueues(): Promise<void> {
         if (this.queues.length > 0) {
-            Promise.all(this.queues.map(queue => {
-                this.ForceQueueUpdate(queue.name);
+            await Promise.all(this.queues.map(async queue => {
+                await this.ForceQueueUpdate(queue.name);
             }));
         } else {
             throw new UserError("There are no queues to update");
@@ -676,6 +675,7 @@ export class AttendingServer {
             };
             await this.firebase_db.collection('msgAfterLeaveVC').doc(this.server.id).set(data);
         }
+        // TODO: Directly return response
         let response: string;
         if (enable === true && this.msgAfterLeaveVC !== null) {
             response = "BOB will now send the following message to students once they finish recieving tutoring: \n\n" + this.msgAfterLeaveVC;
@@ -707,6 +707,7 @@ If you wish to enable this feature later, just set the enable option to true.";
             await this.firebase_db.collection('msgAfterLeaveVC').doc(this.server.id).set(data);
         }
 
+        // TODO: Directly return response
         let response: string;
         if (this.msgEnable === true && this.msgAfterLeaveVC !== null) {
             response = "BOB will now send the following message to students once they finish receiving tutoring: \n\n" + this.msgAfterLeaveVC;
@@ -731,14 +732,15 @@ disabled. To enable it, do `/post_session_msg enable: true`";
             return null;
         }
 
+        // ? why initialze to -1
         let IDColNum = -1;
         let NameColNum = -1;
 
-        let rows: GoogleSpreadsheetRow[];
-        rows = await this.tutor_info_sheet.getRows();
+        const rows: GoogleSpreadsheetRow[] = await this.tutor_info_sheet.getRows();
         NameColNum = this.tutor_info_sheet.headerValues.indexOf("Calendar Name");
         IDColNum = this.tutor_info_sheet.headerValues.indexOf("Discord ID");
-        await rows.forEach(row => {
+
+        rows.forEach(row => {
             HelperNames.set(row._rawData[NameColNum], row._rawData[IDColNum]);
         });
 
@@ -751,19 +753,27 @@ disabled. To enable it, do `/post_session_msg enable: true`";
      * @returns `string`: A message that is to be sent to the user, and a `boolean`: true if the command succeeds
      */
     async setTutorCalendar(calendar_id: string): Promise<[string, boolean]> {
+        // TODO: Move varaible decalarations after fetch
         let calendarName: string | null = null;
 
-        //attempt a connection to the calendar. If successful, send the name of the calendar back as confirmation
+        // Attempt a connection to the calendar. 
+        // If successful, send the name of the calendar back as confirmation
 
-        const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/' + calendar_id + '/events?key=' + process.env.BOB_GOOGLE_CALENDAR_API_KEY);
+        const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/'
+            + calendar_id
+            + '/events?key='
+            + process.env.BOB_GOOGLE_CALENDAR_API_KEY);
         const data = await response.json();
 
+        // ? Isn't there a google calendar data model somewhere
         if (data !== null) {
             calendarName = data.summary;
         } else {
             calendarName = null;
         }
 
+
+        // TODO: Use guard statments
         if (calendarName === undefined) {
             return ["Something went wrong. Please try again", false];
         } else if (calendarName === null) {
@@ -793,15 +803,18 @@ disabled. To enable it, do `/post_session_msg enable: true`";
      */
     async setTutorSheets(doc_id: string, sheets_id: string): Promise<[string, boolean]> {
 
-        let tutor_doc: GoogleSpreadsheet | null = null;
-        let tutor_sheet: GoogleSpreadsheetWorksheet | null = null;
+        // let tutor_doc: GoogleSpreadsheet | null = null;
+        // let tutor_sheet: GoogleSpreadsheetWorksheet | null = null;
 
-        tutor_doc = new GoogleSpreadsheet(doc_id);
+        const tutor_doc: GoogleSpreadsheet = new GoogleSpreadsheet(doc_id);
         await tutor_doc.useServiceAccountAuth(gcs_creds);
         await tutor_doc.loadInfo();
 
-        tutor_sheet = tutor_doc.sheetsById[parseInt(sheets_id)];
+        // ? diff between tutor sheet and tutor doc?
+        const tutor_sheet: GoogleSpreadsheetWorksheet | undefined = tutor_doc.sheetsById[parseInt(sheets_id)];
 
+        // ? tutor doc will never be nullish why check for both
+        // TODO: Also use guard statements here
         if (tutor_doc === undefined || tutor_sheet === undefined) {
             return ["Something went wrong. Please try again", false];
         } else if (tutor_doc === null || tutor_sheet === null) {
@@ -834,7 +847,7 @@ disabled. To enable it, do `/post_session_msg enable: true`";
             return ["The necessary resources for this command to work have not been set up. Please contact an admin to set it up", new Date(0)];
         }
 
-        const queue = this.queues.find(queue => queue.name == queue_name);
+        const queue = this.queues.find(queue => queue.name === queue_name);
         if (queue === undefined) {
             return ["Invalid queue channel", new Date(0)];
         }
@@ -851,23 +864,31 @@ disabled. To enable it, do `/post_session_msg enable: true`";
 
         // Fetch the events in the calendar that end after the current time upto a week and sort by start time
 
-        const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/' + this.tutor_info_calendar +
-            '/events?orderBy=startTime&singleEvents=true&timeMax=' + maxDate.toISOString()
+        const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/'
+            + this.tutor_info_calendar
+            + '/events?orderBy=startTime&singleEvents=true&timeMax='
+            + maxDate.toISOString()
             + '&timeMin=' + minDate.toISOString()
             + '&key=' + process.env.BOB_GOOGLE_CALENDAR_API_KEY);
 
         const data = await response.json();
 
+
+        // ? what is numItems and maxItems
         let numItems = 0;
         const maxItems = 5;
 
         let table = new String;
 
+        // ? why init to 0
         const update_time = new Date(0);
 
+        // ? why await when there's no async calls
+        // TODO: event variable should have a data model, not inline types
+        // TODO: do we really need all this string parsing magic?
         await data.items.forEach((event: { summary: string; start: { dateTime: string; }; end: { dateTime: string; }; }) => {
             let pos = event.summary.indexOf(" - ");
-            if ( pos === -1 ) {
+            if (pos === -1) {
                 pos = event.summary.length;
             }
             const helperName = event.summary.substring(0, pos);
@@ -909,6 +930,7 @@ disabled. To enable it, do `/post_session_msg enable: true`";
                 }
             }
         });
+        // TODO: Do the checks first, then declare current_helpers
         let current_helpers = new String();
         if (queue.helpers_set.size > 0) {
             current_helpers = "Currently available: ";
@@ -956,13 +978,13 @@ disabled. To enable it, do `/post_session_msg enable: true`";
      * feature has been enabled
      * @param member The member which has just left a session with a tutor
      */
-    UpdateMemberLeftVC(member: GuildMember): void {
+    async UpdateMemberLeftVC(member: GuildMember): Promise<void> {
         if (this.msgAfterLeaveVC === null || this.msgEnable === false) {
-            this.member_states.GetMemberState(member).OnLeaveVC(null);
+            await this.member_states.GetMemberState(member).OnLeaveVC(null);
             return;
         }
         else {
-            this.member_states.GetMemberState(member).OnLeaveVC(this.msgAfterLeaveVC);
+            await this.member_states.GetMemberState(member).OnLeaveVC(this.msgAfterLeaveVC);
         }
     }
 
@@ -974,6 +996,22 @@ disabled. To enable it, do `/post_session_msg enable: true`";
         return this.msgAfterLeaveVC;
     }
 
+    async AutoScheduleUpdateWrapper(): Promise<void> {
+        const getUpcomingHoursTable = this.getUpcomingHoursTable;
+        const queues = this.queues; // ? what if queues change?
+        await (async () => {
+            return queues.map(queue => {
+                let timerID = setTimeout(async function tick() {
+                    await queue.UpdateSchedule(await getUpcomingHoursTable(queue.name));
+                    const newTimeDelta = Math.abs(queue.update_time.getTime() - (new Date()).getTime());
+                    // immediately schedule a new async call
+                    timerID = setTimeout(tick, newTimeDelta);
+                }, 0);
+            });
+        })();
+    }
+
+    // TODO: Rewrite this, still looks sketchy
     async AutoScheduleUpdates(server: AttendingServer): Promise<void[]> {
         // Thanks to @tomli380576 for providing most of the code and logic for this
         return this.queues.map(queue => {
