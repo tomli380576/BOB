@@ -37,7 +37,7 @@ initializeApp({
 });
 
 const servers: Collection<Guild, AttendingServer> = new Collection();
-const firebase_db: FirebaseFirestore.Firestore = getFirestore(); // ? what is stroed in firebase? config files?
+const firebase_db: FirebaseFirestore.Firestore = getFirestore(); // ? what is stored in firebase? config files?
 console.log('Connected to Firebase database');
 
 client.login(process.env.BOB_BOT_TOKEN).catch((e: Error) => {
@@ -52,8 +52,8 @@ client.on('error', (error) => {
 client.on('ready', async () => {
     console.log('B.O.B. V3');
 
-    if (client.user === null) { // ? why the null check
-        throw new Error('Login Unsuccessful.');
+    if (client.user === null) { // ? what's the difference between null and error in client.login
+        throw new Error('Login Unsuccessful. Check BOB\'s Discord Credentials');
     }
 
     console.log(`Logged in as ${client.user.tag}!`);
@@ -61,7 +61,8 @@ client.on('ready', async () => {
 
     const guilds = await client.guilds.fetch();
     console.log(`Found ${guilds.size} server(s)`);
-    const full_guilds = await Promise.all(guilds.map(guild => guild.fetch())); // ? what is full guild
+    const full_guilds = await Promise.all(guilds.map(guild => guild.fetch()));
+    // ? what is full guild, all the servers this BOB instance is part of?
 
     // Connecting to the attendance sheet
     let attendance_doc: GoogleSpreadsheet | null = null;
@@ -76,9 +77,10 @@ client.on('ready', async () => {
             .then(server => servers.set(guild, server))
             .then(() => PostSlashCommands(guild))
             .catch((err: Error) => {
-                console.error(`An error occured in processing servers during startup. ${err.stack}`);
-            })
+                console.error(`An error occured in processing servers during startup of server: ${guild.name}. ${err.stack}`);
+            }) // ? where's the error handlers for the servers that failed to setup?
     ));
+    // ? throw uncaught here? promise.all is all or nothing
 
     console.log('Ready to go!');
 
@@ -143,7 +145,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         // if not a helper and marked as being helped
         // send the person who left vc a dm to fill out a form
         // mark as not currently being helped
-        server.UpdateMemberLeftVC(member as GuildMember);
+        await server.UpdateMemberLeftVC(member as GuildMember);
     }
 });
 
@@ -160,9 +162,9 @@ client.on('messageDelete', async message => {
         console.error("Recognized a message deletion without a guild");
         return;
     }
-    
+
     const server = servers.get(message.guild) ?? await JoinGuild(message.guild);
-    
+
     // ? non null assertion or typecasting
     // ? also what if message.member is actually null?
     await server.EnsureHasRole(message.member as GuildMember);

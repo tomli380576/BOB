@@ -23,17 +23,20 @@ export class AttendingServer {
     private server: Guild
     private attendance_doc: GoogleSpreadsheet | null
     private attendance_sheet: GoogleSpreadsheetWorksheet | null = null
-    private firebase_db: any
+    private firebase_db: Firestore
 
+    // ? why is any of this nullable
+    // To handle non-tutoring servers we can make a base class that doesn't require google sheets
+    // then make a child class that extends it
     private tutor_info_doc: GoogleSpreadsheet | null = null
     private tutor_info_sheet: GoogleSpreadsheetWorksheet | null = null
     private tutor_info_calendar: string | null = null
 
-    private msgAfterLeaveVC: string | null = null
+    private msgAfterLeaveVC: string | null = null // ? default to empty string
     private oldMsgALVC: string | null = null
     private msgEnable = false
 
-    private constructor(client: Client, server: Guild, firebase_db: any, attendance_doc: GoogleSpreadsheet | null) {
+    private constructor(client: Client, server: Guild, firebase_db: Firestore, attendance_doc: GoogleSpreadsheet | null) {
         this.client = client;
         this.server = server;
         this.member_states = new MemberStateManager();
@@ -70,12 +73,12 @@ export class AttendingServer {
             me.oldMsgALVC = msgAfterLeaveVCDoc.data()?.oldMsgALVC ?? null;
         }
 
+        // ? why are these nullable
         let sheets_id: string | null = null; // ? what is sheets id, the one in .env?
         let doc_id: string | null = null; // ? what is doc id
 
-        // ? What is iin tutor_info
-        // ? Data model anywhere
-
+        // ? What is in firebase_db.collection('tutor_info')
+        // ? is there a data model anywhere
         // TODO: Replace everything below with ?? operator
         const tutorInfoDoc = await firebase_db.collection('tutor_info').doc(server.id).get();
         if (tutorInfoDoc.exists) {
@@ -111,6 +114,7 @@ export class AttendingServer {
         await Promise.all(me.queues.map(async queue => {
             await me.ForceQueueUpdate(queue.name);
         }));
+        // ? no catch here
         await server.members.fetch().then(members => members.map(member => me.EnsureHasRole(member)));
         return me;
     }
@@ -166,7 +170,7 @@ export class AttendingServer {
      */
     async RemoveMemberFromQueues(member: GuildMember): Promise<number> {
         let queue_count = 0;
-        await Promise.all(this.queues.map(queue => {
+        await Promise.all(this.queues.map(async queue => {
             if (queue.Has(member)) {
                 queue_count++;
                 return queue.Remove(member);
@@ -205,6 +209,8 @@ export class AttendingServer {
             await queue.UpdateSchedule(await this.getUpcomingHoursTable(queue.name));
         }));
         // if the queue already has people, notify the the tutor that there is a queue that isn't empty
+        // TODO: DO NOT call async methods inside a for loop
+        // TODO: Change to Promise.all()
         this.GetHelpableQueues(member).forEach(queue => {
             if (queue.length > 0) {
                 member.send(SimpleEmbed("There are some students in the queues already", EmbedColor.Warning));
@@ -226,6 +232,7 @@ export class AttendingServer {
         if (this.attendance_sheet === null) {
             await this.attendance_doc.loadInfo();
             //find the sheet whose name is the same as the server's name
+            // TODO: Use Array.filter() not indices
             for (let i = 0; i < this.attendance_doc.sheetCount; i++) {
                 const current_sheet = this.attendance_doc.sheetsByIndex[i];
                 if (current_sheet.title === this.server.name) {
@@ -261,12 +268,12 @@ export class AttendingServer {
     async RemoveHelper(member: GuildMember): Promise<number> {
         // Remove a helper and return the time they spent helping in ms
         await Promise.all(this.GetHelpableQueues(member).map(async queue => {
-            queue.RemoveHelper(member);
+            await queue.RemoveHelper(member);
             await queue.UpdateSchedule(await this.getUpcomingHoursTable(queue.name));
         }));
         const start_time = this.member_states.GetMemberState(member).StopHelping();
         // Update the attendance log in the background
-        void this.UpdateAttendanceLog(member, start_time).catch(err => {
+        await this.UpdateAttendanceLog(member, start_time).catch(err => {
             console.error(`Failed to update the attendance log for ${member.user.username} who helped for ${Math.round((Date.now() - start_time) / 60000)} mins`);
             console.error(`Error: ${err}`);
         });
@@ -320,9 +327,11 @@ export class AttendingServer {
             }
             target_queue = queue;
         } else { // if no options were added, dequeue the person who has been waiting the longest
+            // TODO: Chain 2 array methods together
+            // ? also target queue is undefined here, why is this valid
             const wait_times = helpable_queues.map(queue => queue.Peek()).map(state => state === undefined ? -Infinity : state.GetWaitTime());
             const index_of_max = wait_times.indexOf(Math.max(...wait_times));
-            target_queue = helpable_queues[index_of_max];
+            target_queue = helpable_queues[index_of_max]; // ? Doesn't this raise indexing errors
         }
         // if there's no-one to dequeue
         if (target_queue.length === 0) {
@@ -341,6 +350,7 @@ export class AttendingServer {
      * @param author The helper for whose queues the message is to be sent to
      * @returns `string`: A message that is to be sent to the user, and a `boolean`: true if the command succeeds
      */
+    // TODO: Use actual optional args
     async Announce(queue_option: GuildChannel | null, message: string, author: GuildMember): Promise<[string, boolean]> {
         const queue_name = queue_option !== null ? queue_option.name : null;
 
@@ -489,7 +499,7 @@ export class AttendingServer {
             .then(channels => channels.filter(channel => channel.type === 'GUILD_CATEGORY'))
             .then(channels => channels.map(channel => channel as CategoryChannel))
             .then(categories =>
-                Promise.all(categories.map(category => {
+                Promise.all(categories.map(category => { // ! not all code paths return a value
                     const queue_channel = category.children.find(child => child.name === 'queue') as TextChannel;
                     if (queue_channel !== undefined && queue_channel.type === "GUILD_TEXT") {
                         if (this.queues.find(queue => queue.name === category.name) === undefined) {
@@ -500,8 +510,10 @@ export class AttendingServer {
                                     if (messages.size === 2) {
                                         const first_message = messages.first();
                                         const second_message = messages.last();
-                                        if (first_message === undefined || second_message === undefined)
-                                            return [null, null];
+                                        if (first_message === undefined || second_message === undefined) {
+                                            return [null, null]; // ? what is null, null
+                                        }
+                                        // ? no one consumes this value why returning it?
                                         return [first_message, second_message];
                                     } else {
                                         messages.forEach(message => message.delete());
@@ -512,6 +524,8 @@ export class AttendingServer {
                                     this.queues.push(
                                         new HelpQueue(category.name, new HelpQueueDisplayManager(this.client, queue_channel, messages[0], messages[1]),
                                             this.member_states));
+
+                                    // TODO: change to promise all
                                     await (await queue_channel.messages.fetch()).forEach(message => {
                                         if (message.pinned === false)
                                             message.delete();
@@ -519,6 +533,7 @@ export class AttendingServer {
                                 });
                         } else {
                             console.warn(`The server "${this.server.name}" contains multiple queues with the name "${category.name}"`);
+                            // ? shouldn't we return something here
                         }
                     }
                 }))
@@ -598,7 +613,7 @@ export class AttendingServer {
                 const owner = await this.server.fetchOwner();
                 console.error(`Failed to update roles on "${this.server.name}". Error: ${err}`);
                 await owner.send(SimpleEmbed(`I can't update the roles on "${this.server.name}". You should check that my role is the highest on this server.`, EmbedColor.Error));
-                return undefined;
+                return undefined; //? why
             });
     }
 
@@ -635,6 +650,7 @@ export class AttendingServer {
                 // Discord orders pin list by newest first
                 await schedule_message.pin();
                 await queue_message.pin();
+                // TODO: Promise.all()
                 (await queue_message.channel.messages.fetch()).forEach(async message => {
                     if (message.pinned !== true) {
                         await message.delete();
@@ -657,13 +673,13 @@ export class AttendingServer {
     /**
      * Edit the message that is sent to a member after they finish a session with a helper. Updates the database with the new message
      * @param message The new message that is to be sent to users
-     * @param enable Whether or not to send the message
+     * @param enabled Whether or not to send the message
      * @returns `string`: A message that is to be sent to the user
      */
-    async EditDmMessage(message: string | null, enable: boolean): Promise<string> {
+    async EditDmMessage(message: string | null, enabled: boolean): Promise<string> {
         // update local instance of message
         this.oldMsgALVC = this.msgAfterLeaveVC;
-        this.msgEnable = enable;
+        this.msgEnable = enabled;
         this.msgAfterLeaveVC = message;
 
         // update database with new value, only if it's new
@@ -671,21 +687,19 @@ export class AttendingServer {
             const data = {
                 msgAfterLeaveVC: message,
                 oldMsgALVC: this.oldMsgALVC,
-                enable: enable
+                enable: enabled
             };
             await this.firebase_db.collection('msgAfterLeaveVC').doc(this.server.id).set(data);
         }
-        // TODO: Directly return response
-        let response: string;
-        if (enable === true && this.msgAfterLeaveVC !== null) {
-            response = "BOB will now send the following message to students once they finish recieving tutoring: \n\n" + this.msgAfterLeaveVC;
-        } else if (enable === true && this.msgAfterLeaveVC === null) {
-            response = "BOB has enabled the sending a message after a session feature, but there is no message saved for this server";
+
+        if (enabled && this.msgAfterLeaveVC !== null) {
+            return "BOB will now send the following message to students once they finish recieving tutoring: \n\n" + this.msgAfterLeaveVC;
+        } else if (enabled && this.msgAfterLeaveVC === null) {
+            return "BOB has enabled the sending a message after a session feature, but there is no message saved for this server";
         } else {
-            response = "BOB will no longer send a messages to tutees after the finish recieving tutoring. \
-If you wish to enable this feature later, just set the enable option to true.";
+            return "BOB will no longer send a messages to tutees after the finish recieving tutoring. \
+            If you wish to enable this feature later, just set the enabled option to true.";
         }
-        return response;
     }
 
     /**
@@ -876,7 +890,7 @@ disabled. To enable it, do `/post_session_msg enable: true`";
 
         // ? what is numItems and maxItems
         let numItems = 0;
-        const maxItems = 5;
+        const maxItems = 5; // ? eliminate this by Array.slice()?
 
         let table = new String;
 
@@ -885,7 +899,8 @@ disabled. To enable it, do `/post_session_msg enable: true`";
 
         // ? why await when there's no async calls
         // TODO: event variable should have a data model, not inline types
-        // TODO: do we really need all this string parsing magic?
+        // TODO: extract parsing into separate function?
+        // ? data.items.slice(0, 5).forEach(...)
         await data.items.forEach((event: { summary: string; start: { dateTime: string; }; end: { dateTime: string; }; }) => {
             let pos = event.summary.indexOf(" - ");
             if (pos === -1) {
@@ -894,7 +909,7 @@ disabled. To enable it, do `/post_session_msg enable: true`";
             const helperName = event.summary.substring(0, pos);
             const eventTitle = event.summary.substring(pos + 3);
             const discordID = helpersNameMap?.get(helperName);
-            if (discordID !== undefined && discordID !== null) {
+            if (discordID !== undefined && discordID !== null) { // ? W H A T
 
                 const helper = helpersMap.get(discordID);
 
@@ -930,6 +945,7 @@ disabled. To enable it, do `/post_session_msg enable: true`";
                 }
             }
         });
+
         // TODO: Do the checks first, then declare current_helpers
         let current_helpers = new String();
         if (queue.helpers_set.size > 0) {
@@ -941,11 +957,14 @@ disabled. To enable it, do `/post_session_msg enable: true`";
         } else {
             current_helpers = "No-one is currently helping for **" + queue_name + "**";
         }
+
         const moreInfo = "You can view the full calendar here: " + "https://calendar.google.com/calendar/embed?src=" + this.tutor_info_calendar;
+
         if (numItems === 0) {
             table = 'There are no scheduled hours for this queue in next 7 days.';
             update_time.setDate(new Date().getDate() + 3);
         }
+
         return [current_helpers + "\n\n" + table + '\n' + moreInfo, update_time];
     }
 
