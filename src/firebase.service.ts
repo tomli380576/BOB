@@ -16,8 +16,8 @@ const firebaseApp = initializeApp(firebaseConfig);
 const firestore = getFirestore(firebaseApp);
 
 
-if (import.meta.env.DEV) {
-    connectFirestoreEmulator(firestore, 'localhost', 8080);
-}
+// if (import.meta.env.DEV) {
+//     connectFirestoreEmulator(firestore, 'localhost', 8080);
+// }
 
 export { firestore };

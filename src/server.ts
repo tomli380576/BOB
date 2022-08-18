@@ -12,7 +12,7 @@ import { UserError } from "./user_action_error";
 import { MemberState } from "./member_state_manager";
 import { GoogleSpreadsheet, GoogleSpreadsheetWorksheet } from "google-spreadsheet";
 import { Firestore } from "firebase-admin/firestore";
-import * as gcs_creds from '../gcs_service_account_key.json';
+import gcs_creds from '../gcs_service_account_key.json';
 
 // import fetch from 'node-fetch';
 import { EmbedColor, SimpleEmbed } from "./embed_helper";
@@ -252,7 +252,7 @@ export class AttendingServer {
     async RemoveHelper(member: GuildMember): Promise<number> {
         // Remove a helper and return the time they spent helping in ms
         await Promise.all(this.GetHelpableQueues(member).map(async queue => {
-            queue.RemoveHelper(member);
+            await queue.RemoveHelper(member);
             await queue.UpdateSchedule(await this.getUpcomingHoursTable(queue.name));
         }));
         const start_time = this.member_states.GetMemberState(member).StopHelping();
@@ -799,7 +799,7 @@ disabled. To enable it, do `/post_session_msg enable: true`";
             throw new UserError("The necessary resources for this command to work have not been set up. Please contact an admin to set it up");
         }
 
-        const queue = this.queues.find(queue => queue.name == queue_name);
+        const queue = this.queues.find(queue => queue.name === queue_name);
         if (queue === undefined) {
             throw new UserError("Invalid queue channel");
         }

@@ -37,7 +37,6 @@ export class HelpQueueDisplayManager {
         } else {
             this.schedule_update.setDate(new Date().getDate() + 1);
         }
-
     }
 
     /**
@@ -167,7 +166,7 @@ export class HelpQueueDisplayManager {
         } else {
             await this.schedule_message.edit({
                 embeds: [scheduleEmbed]
-            }).catch();
+            });
         }
         if (old_schedule_message !== this.schedule_message && this.schedule_message !== null) {
             return this.schedule_message;

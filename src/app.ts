@@ -1,23 +1,30 @@
 import Collection from '@discordjs/collection';
 import { Client, Guild, GuildMember, Intents, TextChannel } from 'discord.js';
+
 import { ProcessCommand } from './command_handler';
-import { AttendingServer } from './server';
-import * as dotenv from 'dotenv';
-import { PostSlashCommands } from './slash_commands';
-import { GoogleSpreadsheet } from 'google-spreadsheet';
-import * as gcs_creds from '../gcs_service_account_key.json';
-import * as fbs_creds from '../fbs_service_account_key.json';
 import { ProcessButtonPress } from './button_handler';
+import { AttendingServer } from './server';
+import { PostSlashCommands } from './slash_commands';
+
+import { GoogleSpreadsheet } from 'google-spreadsheet';
+
+import dotenv from 'dotenv';
+import gcs_creds from '../gcs_service_account_key.json';
+import fbs_creds from '../fbs_service_account_key.json';
+
+
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
 dotenv.config();
+console.log('started, env configured');
 
 if (process.env.BOB_BOT_TOKEN === undefined || process.env.BOB_APP_ID === undefined) {
     console.error('Missing token or id!');
     process.exit(1);
 }
 
+const servers: Collection<Guild, AttendingServer> = new Collection();
 const client = new Client({
     intents: [
         Intents.FLAGS.GUILDS,
@@ -30,13 +37,16 @@ const client = new Client({
     ]
 });
 
-const servers: Collection<Guild, AttendingServer> = new Collection();
-
-let firebase_db: FirebaseFirestore.Firestore | null = null;
+//Connect to the firebase database
+initializeApp({
+    credential: cert(fbs_creds)
+});
+const firebase_db: FirebaseFirestore.Firestore = getFirestore();
+console.log('Connected to Firebase database');
 
 void client.login(process.env.BOB_BOT_TOKEN);
 
-client.on('error', (error) => {
+client.on('error', error => {
     console.error(error);
 });
 
@@ -54,44 +64,27 @@ client.on('ready', async () => {
     let attendance_doc: GoogleSpreadsheet | null = null;
     if (process.env.BOB_GOOGLE_SHEET_ID !== undefined) {
         attendance_doc = new GoogleSpreadsheet(process.env.BOB_GOOGLE_SHEET_ID);
-        await attendance_doc.useServiceAccountAuth(gcs_creds);
-        console.log('Connected to Google sheets.');
+        await attendance_doc.useServiceAccountAuth(gcs_creds).then((_) => {
+            console.log('Connected to Google sheets.');
+        }).catch(e => {
+            console.error(e);
+        });
     }
-
-    //Connect to the firebase database
-    initializeApp({
-        credential: cert(fbs_creds)
-    });
-
-    firebase_db = getFirestore();
-    console.log('Connected to Firebase database');
-
-    const minDate = new Date();
-    const maxDate = new Date();
-    maxDate.setDate(minDate.getDate() + 14);
 
     await Promise.all(full_guilds.map(guild =>
         AttendingServer.Create(client, guild, firebase_db, attendance_doc)
             .then(server => servers.set(guild, server))
             .then(() => PostSlashCommands(guild))
             .catch((err: Error) => {
+                console.log('posting slash failed');
                 console.error(`An error occured in processing servers during startup. ${err.stack}`);
             })
     ));
     console.log('Ready to go!');
-    /*Promise.all(full_guilds.map(guild => {
-        servers.get(guild)?.ProcessForever()
-    }))*/
 });
 
 async function JoinGuild(guild: Guild): Promise<AttendingServer> {
     console.log(`Joining guild ${guild.name}`);
-    if (firebase_db === null) {
-        initializeApp({
-            credential: cert(fbs_creds)
-        });
-        firebase_db = getFirestore();
-    }
     const server = await AttendingServer.Create(client, guild, firebase_db);
     await PostSlashCommands(guild);
     servers.set(guild, server);
@@ -190,9 +183,9 @@ client.on('messageDelete', async message => {
 });
 
 client.on('guildMemberAdd', async member => {
-    let server = servers.get(member.guild as Guild);
+    let server = servers.get(member.guild);
     if (server === undefined) {
         server = await JoinGuild(member.guild);
     }
-    await server.EnsureHasRole(member as GuildMember);
+    await server.EnsureHasRole(member);
 });
