@@ -494,6 +494,7 @@ export class AttendingServer {
      * Goes through all the channls in the server, finds all the queue categories and adds them to the list of queues 
      * associated with this server. Also stores the messages (ids) of the queue and schedule messages for each queue object.
      */
+    // ! Only called once on initialization
     async DiscoverQueues(): Promise<void> {
         await this.server.channels.fetch()
             .then(channels => channels.filter(channel => channel.type === 'GUILD_CATEGORY'))
@@ -501,6 +502,8 @@ export class AttendingServer {
             .then(categories =>
                 Promise.all(categories.map(category => { // ! not all code paths return a value
                     const queue_channel = category.children.find(child => child.name === 'queue') as TextChannel;
+
+                    // TODO: Change to guard statement. If condition fails resolve immediately
                     if (queue_channel !== undefined && queue_channel.type === "GUILD_TEXT") {
                         if (this.queues.find(queue => queue.name === category.name) === undefined) {
                             // get the queue message and schedule message if they already exists
@@ -513,7 +516,7 @@ export class AttendingServer {
                                         if (first_message === undefined || second_message === undefined) {
                                             return [null, null]; // ? what is null, null
                                         }
-                                        // ? no one consumes this value why returning it?
+                                        // ? no one consumes this value
                                         return [first_message, second_message];
                                     } else {
                                         messages.forEach(message => message.delete());
@@ -605,8 +608,8 @@ export class AttendingServer {
      * Update the roles list on the server with respect to the queues in the server
      * @returns TODO: returns something, however it is never used
      */
-    async UpdateRoles(): Promise<void | Role> {
-        return this.server.roles.fetch()
+    async UpdateRoles(): Promise<void> {
+        this.server.roles.fetch()
             .then(roles => roles.sort((x, y) => x.createdTimestamp - y.createdTimestamp))
             .then(roles => this.EnsureRolesExist(roles))
             .catch(async (err) => {

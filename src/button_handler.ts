@@ -3,45 +3,57 @@ import { AttendingServer } from "./server";
 
 export async function ProcessButtonPress(server: AttendingServer, interaction: ButtonInteraction): Promise<void> {
     //a space separates the type of interaction and the name of the queue channel
+    // TODO: extract parsing into a separate function
+    // TODO: interaction type should also be another type
     const pos = interaction.customId.indexOf(" ");
-    const type = interaction.customId.substring(0, pos);
+    const interactionType = interaction.customId.substring(0, pos);
     const queue_name = interaction.customId.substring(pos + 1);
 
     if (!(interaction.member instanceof GuildMember)) {
         console.error(`Recieved an interaction without a member from user ${interaction.user} on server ${interaction.guild}`);
         return;
     }
-    
-    // TODO: use switch case
-    if (type === 'join') {
-        await interaction.deferUpdate();
-        await server.EnqueueUser(queue_name, interaction.member).catch(async (errstr: Error) => {
-            if (interaction.member instanceof GuildMember) {
-                await interaction.member.send(errstr.message);
-            }
-        });
-    } else if (type === 'leave') {
-        await interaction.deferUpdate();
-        await server.RemoveMemberFromQueues(interaction.member).catch(async (errstr: Error) => {
-            if (interaction.member instanceof GuildMember && errstr.name === 'UserError') {
-                await interaction.member.send(errstr.message);
-            }
-        });
-    } else if (type === 'notif') {
-        await interaction.deferUpdate();
-        await server.JoinNotifications(queue_name, interaction.member).catch(async (errstr: Error) => {
-            if (interaction.member instanceof GuildMember && errstr.name === 'UserError') {
-                await interaction.member.send(errstr.message);
-            }
-        });
-    } else if (type === 'removeN') {
-        await interaction.deferUpdate();
-        await server.RemoveNotifications(queue_name, interaction.member).catch(async (errstr: Error) => {
-            if (interaction.member instanceof GuildMember && errstr.name === 'UserError') {
-                await interaction.member.send(errstr.message);
-            }
-        });
-    } else {
-        console.error('Received invalid button interaction');
+
+    await interaction.deferUpdate();
+
+    // ? why is there a instanceof check everywhere
+    // ? the above if block already checked?
+    switch (interactionType) {
+        case 'join': {
+            await server.EnqueueUser(queue_name, interaction.member).catch(async (errstr: Error) => {
+                if (interaction.member instanceof GuildMember) {
+                    await interaction.member.send(errstr.message);
+                }
+            });
+            break;
+        }
+        case 'leave': {
+            await server.RemoveMemberFromQueues(interaction.member).catch(async (errstr: Error) => {
+                if (interaction.member instanceof GuildMember && errstr.name === 'UserError') {
+                    await interaction.member.send(errstr.message);
+                }
+            });
+            break;
+        }
+        case 'notif': {
+            await server.JoinNotifications(queue_name, interaction.member).catch(async (errstr: Error) => {
+                if (interaction.member instanceof GuildMember && errstr.name === 'UserError') {
+                    await interaction.member.send(errstr.message);
+                }
+            });
+            break;
+        }
+        case 'removeN': {
+            await server.RemoveNotifications(queue_name, interaction.member).catch(async (errstr: Error) => {
+                if (interaction.member instanceof GuildMember && errstr.name === 'UserError') {
+                    await interaction.member.send(errstr.message);
+                }
+            });
+            break;
+        }
+        default: {
+            console.error('Received invalid button interaction');
+            break;
+        }
     }
 }

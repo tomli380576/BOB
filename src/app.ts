@@ -37,7 +37,7 @@ initializeApp({
 });
 
 const servers: Collection<Guild, AttendingServer> = new Collection();
-const firebase_db: FirebaseFirestore.Firestore = getFirestore(); // ? what is stored in firebase? config files?
+const firebase_db: FirebaseFirestore.Firestore = getFirestore(); // ? what is stored in firebase?
 console.log('Connected to Firebase database');
 
 client.login(process.env.BOB_BOT_TOKEN).catch((e: Error) => {
