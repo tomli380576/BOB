@@ -59,7 +59,7 @@ client.on('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     console.log('Scanning servers I am a part of...');
 
-    const guilds = await client.guilds.fetch();
+    const guilds = await client.guilds.fetch(); // guild is a server
     console.log(`Found ${guilds.size} server(s)`);
     const full_guilds = await Promise.all(guilds.map(guild => guild.fetch()));
     // ? what is full guild, all the servers this BOB instance is part of?
@@ -172,9 +172,10 @@ client.on('messageDelete', async message => {
     const channel = message.channel as TextChannel;
     const category = channel.parent;
 
-    if (category === null) { // ? No error handling here?
+    if (category === null) {
         return;
     }
+
     await server.EnsureQueueSafe(category.name);
     await server.ForceQueueUpdate(category.name);
 });

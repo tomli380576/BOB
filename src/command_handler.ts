@@ -317,7 +317,7 @@ class SetCalendarHandler implements CommandHandler {
 
             //https://calendar.google.com/calendar/embed?src=[calendar_id]&[otherstuff]
 
-            // ? Why is calendar_link nullable
+            // // ? Why is calendar_link nullable
             const header = "https://calendar.google.com/calendar/embed?src=";
             calendar_link = calendar_link.split('&')[0];
             const posHeader = calendar_link.indexOf(header);

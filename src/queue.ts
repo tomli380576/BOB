@@ -9,7 +9,6 @@ import { Client, GuildMember, Message, MessageActionRow, MessageButton, TextChan
 import { MemberState, MemberStateManager } from "./member_state_manager";
 import { UserError } from "./user_action_error";
 import AsciiTable from 'ascii-table';
-// import { EmbedColor, SimpleEmbed } from "./embed_helper";
 
 export class HelpQueueDisplayManager {
 

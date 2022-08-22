@@ -25,14 +25,16 @@ export class AttendingServer {
     private attendance_sheet: GoogleSpreadsheetWorksheet | null = null
     private firebase_db: Firestore
 
-    // ? why is any of this nullable
     // To handle non-tutoring servers we can make a base class that doesn't require google sheets
     // then make a child class that extends it
+
+    // TODO: extract to interface
     private tutor_info_doc: GoogleSpreadsheet | null = null
     private tutor_info_sheet: GoogleSpreadsheetWorksheet | null = null
     private tutor_info_calendar: string | null = null
 
-    private msgAfterLeaveVC: string | null = null // ? default to empty string
+    // TODO: extract to interface
+    private msgAfterLeaveVC = ""; // ? default to empty string
     private oldMsgALVC: string | null = null
     private msgEnable = false
 
@@ -114,7 +116,7 @@ export class AttendingServer {
         await Promise.all(me.queues.map(async queue => {
             await me.ForceQueueUpdate(queue.name);
         }));
-        // ? no catch here
+        //// ? no catch here
         await server.members.fetch().then(members => members.map(member => me.EnsureHasRole(member)));
         return me;
     }
@@ -211,9 +213,9 @@ export class AttendingServer {
         // if the queue already has people, notify the the tutor that there is a queue that isn't empty
         // TODO: DO NOT call async methods inside a for loop
         // TODO: Change to Promise.all()
-        this.GetHelpableQueues(member).forEach(queue => {
+        this.GetHelpableQueues(member).forEach(async queue => {
             if (queue.length > 0) {
-                member.send(SimpleEmbed("There are some students in the queues already", EmbedColor.Warning));
+                await member.send(SimpleEmbed("There are some students in the queues already", EmbedColor.Warning));
                 return;
             }
         });
@@ -516,7 +518,7 @@ export class AttendingServer {
                                         if (first_message === undefined || second_message === undefined) {
                                             return [null, null]; // ? what is null, null
                                         }
-                                        // ? no one consumes this value
+                                        // used in the then()
                                         return [first_message, second_message];
                                     } else {
                                         messages.forEach(message => message.delete());
@@ -529,14 +531,13 @@ export class AttendingServer {
                                             this.member_states));
 
                                     // TODO: change to promise all
-                                    await (await queue_channel.messages.fetch()).forEach(message => {
+                                    await (await queue_channel.messages.fetch()).forEach(async message => {
                                         if (message.pinned === false)
-                                            message.delete();
+                                            await message.delete();
                                     });
                                 });
                         } else {
                             console.warn(`The server "${this.server.name}" contains multiple queues with the name "${category.name}"`);
-                            // ? shouldn't we return something here
                         }
                     }
                 }))
@@ -749,16 +750,12 @@ disabled. To enable it, do `/post_session_msg enable: true`";
             return null;
         }
 
-        // ? why initialze to -1
-        let IDColNum = -1;
-        let NameColNum = -1;
-
         const rows: GoogleSpreadsheetRow[] = await this.tutor_info_sheet.getRows();
-        NameColNum = this.tutor_info_sheet.headerValues.indexOf("Calendar Name");
-        IDColNum = this.tutor_info_sheet.headerValues.indexOf("Discord ID");
+        const name_col_num = this.tutor_info_sheet.headerValues.indexOf("Calendar Name");
+        const ID_col_num = this.tutor_info_sheet.headerValues.indexOf("Discord ID");
 
         rows.forEach(row => {
-            HelperNames.set(row._rawData[NameColNum], row._rawData[IDColNum]);
+            HelperNames.set(row._rawData[name_col_num], row._rawData[ID_col_num]);
         });
 
         return HelperNames;
@@ -827,10 +824,11 @@ disabled. To enable it, do `/post_session_msg enable: true`";
         await tutor_doc.useServiceAccountAuth(gcs_creds);
         await tutor_doc.loadInfo();
 
+        // doc contain sheets
         // ? diff between tutor sheet and tutor doc?
         const tutor_sheet: GoogleSpreadsheetWorksheet | undefined = tutor_doc.sheetsById[parseInt(sheets_id)];
 
-        // ? tutor doc will never be nullish why check for both
+        // TODO: change null checks
         // TODO: Also use guard statements here
         if (tutor_doc === undefined || tutor_sheet === undefined) {
             return ["Something went wrong. Please try again", false];
@@ -904,7 +902,13 @@ disabled. To enable it, do `/post_session_msg enable: true`";
         // TODO: event variable should have a data model, not inline types
         // TODO: extract parsing into separate function?
         // ? data.items.slice(0, 5).forEach(...)
-        await data.items.forEach((event: { summary: string; start: { dateTime: string; }; end: { dateTime: string; }; }) => {
+        type Event = {
+            summary: string;
+            start: { dateTime: string; };
+            end: { dateTime: string; };
+        }
+
+        await data.items.forEach((event: Event) => {
             let pos = event.summary.indexOf(" - ");
             if (pos === -1) {
                 pos = event.summary.length;
@@ -912,7 +916,7 @@ disabled. To enable it, do `/post_session_msg enable: true`";
             const helperName = event.summary.substring(0, pos);
             const eventTitle = event.summary.substring(pos + 3);
             const discordID = helpersNameMap?.get(helperName);
-            if (discordID !== undefined && discordID !== null) { // ? W H A T
+            if (discordID !== undefined && discordID !== null) { 
 
                 const helper = helpersMap.get(discordID);
 

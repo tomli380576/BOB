@@ -16,8 +16,6 @@ export async function ProcessButtonPress(server: AttendingServer, interaction: B
 
     await interaction.deferUpdate();
 
-    // ? why is there a instanceof check everywhere
-    // ? the above if block already checked?
     switch (interactionType) {
         case 'join': {
             await server.EnqueueUser(queue_name, interaction.member).catch(async (errstr: Error) => {

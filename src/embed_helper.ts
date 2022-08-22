@@ -1,6 +1,5 @@
 import { MessageEmbedOptions } from "discord.js";
 
-// ? Use an enum
 export enum EmbedColor {
     Success = 0x00FF00,      // Green
     Error = 0xFF0000,     // Red
@@ -9,7 +8,6 @@ export enum EmbedColor {
     NeedName = 0x0000FF,   // Blue
 }
 
-// TODO: Add data model for the return value
 export function SimpleEmbed(message: string, color = EmbedColor.Neutral): { embeds: MessageEmbedOptions[] } {
     if (message.length > 256) {
         return {
@@ -17,7 +15,10 @@ export function SimpleEmbed(message: string, color = EmbedColor.Neutral): { embe
                 color: color,
                 title: message,
                 timestamp: new Date(),
-                // TODO: author: { name: 'BOBv3', iconURL: 'https://i.postimg.cc/dVkg4XFf/BOB-pfp.png' },
+                author: {
+                    name: 'BOBv3',
+                    iconURL: 'https://i.postimg.cc/dVkg4XFf/BOB-pfp.png'
+                },
             }]
         };
     } else {
