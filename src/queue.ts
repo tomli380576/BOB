@@ -63,7 +63,7 @@ export class HelpQueueDisplayManager {
      */
     async EnsureQueueSafe(): Promise<void> {
         return this.display_channel.messages.fetchPinned()
-            .then(messages => messages.filter(msg => msg.author == this.client.user))
+            .then(messages => messages.filter(msg => msg.author === this.client.user))
             .then(messages => {
                 if (messages.size === 0) {
                     this.queue_message = null;
@@ -86,6 +86,7 @@ export class HelpQueueDisplayManager {
     async OnQueueUpdate(queue: HelpQueue, queue_members: MemberState[]): Promise<Message<boolean> | undefined> {
         const message_text = this.GetQueueText(queue, queue_members);
         let embedColor = 0x000000;
+        // use ternary
         if (queue.is_open === true) {
             embedColor = 0x00FF00;
         } else {

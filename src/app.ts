@@ -37,7 +37,7 @@ initializeApp({
 });
 
 const servers: Collection<Guild, AttendingServer> = new Collection();
-const firebase_db: FirebaseFirestore.Firestore = getFirestore(); // ? what is stored in firebase?
+const firebase_db: FirebaseFirestore.Firestore = getFirestore();
 console.log('Connected to Firebase database');
 
 client.login(process.env.BOB_BOT_TOKEN).catch((e: Error) => {
@@ -62,7 +62,7 @@ client.on('ready', async () => {
     const guilds = await client.guilds.fetch(); // guild is a server
     console.log(`Found ${guilds.size} server(s)`);
     const full_guilds = await Promise.all(guilds.map(guild => guild.fetch()));
-    // ? what is full guild, all the servers this BOB instance is part of?
+    // * full guild is all the servers this BOB instance is part of
 
     // Connecting to the attendance sheet
     let attendance_doc: GoogleSpreadsheet | null = null;

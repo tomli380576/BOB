@@ -49,7 +49,7 @@ class EnqueueCommandHandler implements CommandHandler {
 
         if (user instanceof GuildMember) {
             // Sort of a hack, do a permission check for the user option
-            const admin_role = (interaction.member as GuildMember).roles.cache.find(role => role.name == 'Admin');
+            const admin_role = (interaction.member as GuildMember).roles.cache.find(role => role.name === 'Admin');
             if (admin_role === undefined) {
                 await interaction.editReply(SimpleEmbed(`No can do. You don't have access to this command.`, EmbedColor.Error));
             } else {
@@ -84,7 +84,7 @@ class DequeueCommandHandler implements CommandHandler {
         // Clear any previously set permissions
         await Promise.all(
             helper.voice.channel.permissionOverwrites.cache
-                .filter(overwrite => overwrite.type == 'member')
+                .filter(overwrite => overwrite.type === 'member')
                 .map(overwrite => overwrite.delete()
                 ));
         const helpee = await server.Dequeue(helper, queue_option as CategoryChannel | null, user_option);
@@ -126,7 +126,7 @@ class LeaveCommandHandler implements CommandHandler {
     readonly permission = CommandAccessLevel.ANYONE
     async Process(server: AttendingServer, interaction: CommandInteraction) {
         const queue_count = await server.RemoveMemberFromQueues(interaction.member as GuildMember);
-        if (queue_count == 0) {
+        if (queue_count === 0) {
             await interaction.editReply(SimpleEmbed('You are not in any queues', EmbedColor.Error));
         } else {
             await interaction.editReply(SimpleEmbed(`You have been removed from the queue(s)`, EmbedColor.Success));
@@ -280,7 +280,7 @@ class MsgAfterLeaveVCHandler implements CommandHandler {
             if (change_message_option === true) {
                 await interaction.channel.messages.fetch({ limit: 1 }).then(messages => {
                     const lastMessage = messages.first();
-                    if (lastMessage == undefined)
+                    if (lastMessage === undefined)
                         return;
                     if (lastMessage.author.id === interaction.member?.user.id) {
                         dmMessage = lastMessage.content;
@@ -408,18 +408,18 @@ export async function ProcessCommand(server: AttendingServer, interaction: Comma
             console.error(`Recieved an interaction without a member from user ${interaction.user} on server ${interaction.guild}`);
             return;
         }
-        const admin_role = interaction.member.roles.cache.find(role => role.name == 'Admin');
-        const staff_role = interaction.member.roles.cache.find(role => role.name == 'Staff');
+        const admin_role = interaction.member.roles.cache.find(role => role.name === 'Admin');
+        const staff_role = interaction.member.roles.cache.find(role => role.name === 'Staff');
 
-        if ((handler.permission == CommandAccessLevel.ADMIN && admin_role === undefined) ||
-            (handler.permission == CommandAccessLevel.STAFF && staff_role == undefined)) {
+        if ((handler.permission === CommandAccessLevel.ADMIN && admin_role === undefined) ||
+            (handler.permission === CommandAccessLevel.STAFF && staff_role === undefined)) {
             await interaction.reply({ embeds: SimpleEmbed(`No can do. You don't have access to this command.`, EmbedColor.Error).embed, ephemeral: true });
             return;
         }
 
         await interaction.deferReply({ ephemeral: true });
         await handler.Process(server, interaction).catch((err: Error) => {
-            if (err.name == 'UserError') {
+            if (err.name === 'UserError') {
                 return interaction.editReply(SimpleEmbed(err.message, EmbedColor.Error));
             } else {
                 console.error(`Encountered an internal error when processing "${interaction.commandName}" for user "${interaction.user.username}" on server "${interaction.guild?.name}": "${err.stack}"`);

@@ -8,6 +8,9 @@ export enum EmbedColor {
     NeedName = 0x0000FF,   // Blue
 }
 
+// Condition types based on interaction
+// TODO: Add interaction param
+
 export function SimpleEmbed(message: string, color = EmbedColor.Neutral): { embeds: MessageEmbedOptions[] } {
     if (message.length > 256) {
         return {

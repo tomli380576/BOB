@@ -4,7 +4,7 @@ import { AttendingServer } from "./server";
 export async function ProcessButtonPress(server: AttendingServer, interaction: ButtonInteraction): Promise<void> {
     //a space separates the type of interaction and the name of the queue channel
     // TODO: extract parsing into a separate function
-    // TODO: interaction type should also be another type
+    // TODO: interactionType should also be another type
     const pos = interaction.customId.indexOf(" ");
     const interactionType = interaction.customId.substring(0, pos);
     const queue_name = interaction.customId.substring(pos + 1);
